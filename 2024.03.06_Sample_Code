@@ -1,0 +1,156 @@
+import React, { useState, useContext } from "react"
+import axios from "axios"
+const BASE_URL = "http://localhost:5000/api/v1/";
+const GlobalContext = React.createContext()
+
+// create global provider that organizes data to provide to dashboard
+export const GlobalProvider = ({children}) => {
+    // take incomes and expenses
+    const [incomes, setIncomes] = useState([])
+    const [expenses, setExpenses] = useState([])
+    const [error, setError] = useState([null])
+    //access income functions (post, get, and delete) using axios
+    const addIncome = async (income) => {
+        await axios.post(`${BASE_URL}add-income`, income)
+            .catch((err) => {
+                setError(err.response.data.message)
+            })
+        getIncomes()
+    }
+    const getIncomes = async () => {
+        const response = await axios.get(`${BASE_URL}get-incomes`)
+        setIncomes(response.data)
+    }
+    const deleteIncome = async (id) => {
+        await axios.delete(`${BASE_URL}delete-income/${id}`)
+        getIncomes()
+    }
+    const totalIncome = () => {
+        let totalIncome = 0
+        incomes.forEach((income) => {
+            totalIncome += income.amount
+        })
+        return totalIncome;
+    }
+    //access expense functions (post, get, and delete) using axios
+    const addExpense = async (expense) => {
+        await axios.post(`${BASE_URL}add-expense`, expense)
+            .catch((err) => {
+                setError(err.response.data.message)
+            })
+        getExpenses()
+    }
+    const getExpenses = async () => {
+        const response = await axios.get(`${BASE_URL}get-expenses`)
+        setExpenses(response.data)
+    }
+    const deleteExpense = async (id) => {
+        await axios.delete(`${BASE_URL}delete-expense/${id}`)
+        getExpenses()
+    }
+    const totalExpense = () => {
+        let totalExpense = 0
+        expenses.forEach((expense) => {
+            totalExpense += expense.amount
+        })
+        return totalExpense;
+    }
+    // calculate the difference in income and expenses
+    const totalBalance = () => {
+        return totalIncome() - totalExpense()
+    }
+
+    const transactions = () => {
+        // copying incomes and expenses
+        const history = [...incomes, ...expenses]
+        //compare a and b 
+        history.sort((a, b) => {
+            return new Date(a.date) - new Date(b.date)
+        })
+
+        return {history};
+    }
+
+    // create an array with expenses as negative value
+    // add transactions amount for each day since the beginning
+    const netWorthGraph = () => {
+
+        // initialize todays date
+        const today = new Date();
+        const transactionsArr = JSON.parse(JSON.stringify(transactions().history));
+        const currentDate = new Date( today.getFullYear(), today.getMonth(), today.getDate());
+        // initialize hashmap
+        const netWorthMap = {};
+        // if there are incomes and/or expenses, populate netWorthMap 
+        if (transactionsArr.length > 0) {
+
+            const firstRecordedTransaction = transactionsArr[0];
+            const firstRecordedDate = new Date (firstRecordedTransaction.date);
+
+            // Calculate the difference in milliseconds
+            const timeDifference = currentDate.getTime() - firstRecordedDate.getTime();
+            // Convert the difference to days
+            const daysDifference = timeDifference / (1000 * 60 * 60 * 24);
+    
+            let arr = new Array(transactionsArr.length);
+            for (let i = 0; i < transactionsArr.length; i++) {
+                if (transactionsArr[i].type === 'expense') {
+                    transactionsArr[i].amount = -1 * transactionsArr[i].amount;
+                }
+                arr[i] = transactionsArr[i];
+            }
+
+            // go through each date in the timeline
+            let netWorthCumulative = 0;
+            // go through each date in the timeline
+            for ( let i = daysDifference; i >= 0; i-- ) {
+                // Generate the date for each label by subtracting the number of days from the current date
+                const date = new Date( today.getFullYear(), today.getMonth(), today.getDate() - i );
+                // Initialize spending for the date
+                netWorthMap[date.toISOString()] = 0;
+                // populate hashmap with dates (keys) tied to spendings (values)
+                for ( let j = 0; j < arr.length; j++ ) {
+                    
+                    // hold variable for the expenses' date
+                    const arrDate = new Date(arr[j].date);
+                    
+                    // if we have expenses with dates in the chart, add expense
+                    if (date.toDateString() === arrDate.toDateString()) {
+                        netWorthCumulative += arr[j].amount;
+                    }
+                }
+                // set spendings for each day as cumulative for the week so far
+                netWorthMap[date.toISOString()] = netWorthCumulative;
+            }
+        } else {
+            console.log('The array is empty.');
+        }
+        return {netWorthMap};
+    };
+
+    return (
+        <GlobalContext.Consumer.Provider value = {{
+            addIncome,
+            getIncomes,
+            deleteIncome,
+            totalIncome,
+            incomes,
+            addExpense,
+            getExpenses,
+            deleteExpense,
+            totalExpense,
+            expenses,
+            totalBalance,
+            transactionHistory,
+            transactions,
+            error,
+            netWorthGraph,
+            setError
+        }}>
+            {children}
+        </GlobalContext.Consumer.Provider>
+    )
+}
+export const useGlobalContext = () =>{
+    return useContext(GlobalContext)
+}
